@@ -49,7 +49,7 @@ Run `bin\ClaudeUsageTray.exe`. The badge may start in the tray overflow (`^`); d
   - **Refresh now**;
   - **Tray icon shows**: session limit %, weekly limit % or session time elapsed %;
   - **Exit**.
-- **Refreshing:** limits are fetched every 2 minutes, or right away when you click **Refresh**. Countdowns update every minute.
+- **Refreshing:** limits are fetched every 3 minutes by default, or right away when you click **Refresh**. You can change the interval under right-click → **Refresh every** (1, 2, 3, 5, 10 or 15 minutes). Countdowns update every minute.
 
 ## Where the data comes from
 
@@ -74,7 +74,7 @@ Your Claude login gives access to your account, so here is exactly what the app 
 
 ### It only reads
 - **On disk:** it reads one file, `.credentials.json`, in read-only mode. It doesn't read your Claude Code conversations or anything else. It writes nothing to disk and doesn't touch the registry.
-- **On the network:** one `GET https://api.anthropic.com/api/oauth/usage` request, made every 2 minutes or when you click Refresh. That is the only address the app contacts. The request only reads your usage and changes nothing on your account. It uses HTTPS with Windows' normal certificate checks.
+- **On the network:** one `GET https://api.anthropic.com/api/oauth/usage` request, made at the refresh interval (3 minutes by default) or when you click Refresh. That is the only address the app contacts. The request only reads your usage and changes nothing on your account. It uses HTTPS with Windows' normal certificate checks.
 - **No token refresh:** an expired login is never refreshed, because refreshing would write new credentials and could sign Claude Code out.
 - **No other programs:** the app never launches anything.
 

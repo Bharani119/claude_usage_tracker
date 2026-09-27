@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace ClaudeUsageTray
@@ -13,6 +14,38 @@ namespace ClaudeUsageTray
         static readonly Color Border = Color.FromArgb(70, 70, 70);
         static readonly Color TimeColor = Color.FromArgb(120, 150, 200);
         static readonly Color OverColor = IconRenderer.Over;
+
+        // Windows 11 (build 22000+) can round a window's corners itself and then draws a
+        // matching border and shadow. Older Windows keeps our square border and shadow.
+        static readonly bool RoundedCorners = WindowsBuild() >= 22000;
+
+        const int DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_ROUND = 2;
+        const int DWMWA_BORDER_COLOR = 34;
+
+        [DllImport("dwmapi.dll")]
+        static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct OsVersionInfo
+        {
+            public int Size, Major, Minor, Build, Platform;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string ServicePack;
+        }
+
+        // Environment.OSVersion reports Windows 8 to apps without a manifest; ntdll tells the truth.
+        [DllImport("ntdll.dll")]
+        static extern int RtlGetVersion(ref OsVersionInfo info);
+
+        static int WindowsBuild()
+        {
+            try
+            {
+                var v = new OsVersionInfo();
+                v.Size = Marshal.SizeOf(typeof(OsVersionInfo));
+                return RtlGetVersion(ref v) == 0 ? v.Build : 0;
+            }
+            catch (Exception) { return 0; }
+        }
 
         readonly TableLayoutPanel table;
         readonly Font headerFont, sectionFont;
@@ -60,10 +93,20 @@ namespace ClaudeUsageTray
             get
             {
                 var cp = base.CreateParams;
-                cp.ClassStyle |= 0x20000;   // CS_DROPSHADOW
+                if (!RoundedCorners) cp.ClassStyle |= 0x20000;   // CS_DROPSHADOW (square)
                 cp.ExStyle |= 0x80;         // WS_EX_TOOLWINDOW: keep out of Alt+Tab
                 return cp;
             }
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            if (!RoundedCorners) return;
+            int round = DWMWCP_ROUND;
+            DwmSetWindowAttribute(Handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
+            int border = ColorTranslator.ToWin32(Border);   // match the old border colour
+            DwmSetWindowAttribute(Handle, DWMWA_BORDER_COLOR, ref border, sizeof(int));
         }
 
         protected override void OnDeactivate(EventArgs e)
@@ -82,6 +125,7 @@ namespace ClaudeUsageTray
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
+            if (RoundedCorners) return;   // Windows draws the border around rounded corners
             using (var pen = new Pen(Border))
                 e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
         }

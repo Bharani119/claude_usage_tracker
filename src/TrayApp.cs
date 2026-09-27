@@ -17,6 +17,8 @@ namespace ClaudeUsageTray
         readonly FlyoutForm flyout;
         readonly FormsTimer tick;
         readonly ToolStripMenuItem[] modeItems;
+        readonly ToolStripMenuItem[] intervalItems;
+        static readonly int[] IntervalMinutes = { 1, 2, 3, 5, 10, 15 };
 
         PlanUsage plan;
         string error;
@@ -48,9 +50,18 @@ namespace ClaudeUsageTray
             };
             modeMenu.DropDownItems.AddRange(modeItems);
             menu.Items.Add(modeMenu);
+
+            var intervalMenu = new ToolStripMenuItem("Refresh every");
+            intervalItems = new ToolStripMenuItem[IntervalMinutes.Length];
+            for (int i = 0; i < IntervalMinutes.Length; i++)
+                intervalItems[i] = IntervalItem(IntervalMinutes[i]);
+            intervalMenu.DropDownItems.AddRange(intervalItems);
+            menu.Items.Add(intervalMenu);
+
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Exit", null, (s, e) => Quit());
             SyncModeChecks();
+            SyncIntervalChecks();
 
             tray = new NotifyIcon();
             tray.ContextMenuStrip = menu;
@@ -59,7 +70,7 @@ namespace ClaudeUsageTray
             SetIcon(IconRenderer.Render("…", IconRenderer.Idle));
             tray.Visible = true;
 
-            // Every minute: redraw countdowns; the client itself only calls the API every 2 minutes.
+            // Every minute: redraw countdowns; the client only calls the API once its interval has passed.
             tick = new FormsTimer { Interval = 60000 };
             tick.Tick += (s, e) => Poll(false);
             tick.Start();
@@ -80,7 +91,26 @@ namespace ClaudeUsageTray
             foreach (var item in modeItems) item.Checked = (IconMode)item.Tag == mode;
         }
 
-        // force: call the API now instead of waiting for the 2-minute poll interval.
+        ToolStripMenuItem IntervalItem(int minutes)
+        {
+            var item = new ToolStripMenuItem(minutes == 1 ? "1 minute" : minutes + " minutes");
+            item.Tag = minutes;
+            item.Click += (s, e) =>
+            {
+                planClient.Interval = TimeSpan.FromMinutes(minutes);
+                SyncIntervalChecks();
+                Poll(false);   // a shorter interval may already be due
+            };
+            return item;
+        }
+
+        void SyncIntervalChecks()
+        {
+            foreach (var item in intervalItems)
+                item.Checked = TimeSpan.FromMinutes((int)item.Tag) == planClient.Interval;
+        }
+
+        // force: call the API now instead of waiting for the refresh interval.
         void Poll(bool force)
         {
             if (polling) { pollPending = true; forcePending |= force; return; }

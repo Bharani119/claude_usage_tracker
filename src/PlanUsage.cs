@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Net;
+using System.Threading;
 using System.Web.Script.Serialization;
 
 namespace ClaudeUsageTray
@@ -48,13 +49,23 @@ namespace ClaudeUsageTray
     class PlanUsageClient
     {
         const string Url = "https://api.anthropic.com/api/oauth/usage";
-        static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(2);
+        public static readonly TimeSpan DefaultInterval = TimeSpan.FromMinutes(3);
+        // Polls are checked by a once-a-minute timer; without some slack a 1-minute interval
+        // would just miss each tick and effectively become 2 minutes.
+        static readonly TimeSpan Slack = TimeSpan.FromSeconds(5);
 
         readonly string credentialsPath;
-        DateTime nextPoll = DateTime.MinValue;
+        long intervalTicks = DefaultInterval.Ticks;   // set on the UI thread, read by the poll worker
+        DateTime lastAttempt = DateTime.MinValue, backoffUntil = DateTime.MinValue;
 
         public PlanUsage Last { get; private set; }
         public string Error { get; private set; }
+
+        public TimeSpan Interval
+        {
+            get { return TimeSpan.FromTicks(Interlocked.Read(ref intervalTicks)); }
+            set { Interlocked.Exchange(ref intervalTicks, value.Ticks); }
+        }
 
         public PlanUsageClient(string claudeConfigDir)
         {
@@ -65,8 +76,8 @@ namespace ClaudeUsageTray
         public void Poll(bool force)
         {
             DateTime now = DateTime.Now;
-            if (!force && now < nextPoll) return;
-            nextPoll = now + PollInterval;
+            if (!force && (now < lastAttempt + Interval - Slack || now < backoffUntil)) return;
+            lastAttempt = now;
             try
             {
                 Last = Fetch();
@@ -75,7 +86,7 @@ namespace ClaudeUsageTray
             catch (PlanUsageException ex)
             {
                 Error = ex.Message;
-                if (ex.RetryAfter > PollInterval) nextPoll = now + ex.RetryAfter;
+                if (ex.RetryAfter > TimeSpan.Zero) backoffUntil = now + ex.RetryAfter;
             }
         }
 
