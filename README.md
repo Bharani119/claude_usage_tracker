@@ -2,6 +2,10 @@
 
 A small Windows tray app that shows your Claude plan limits: the session % and weekly % shown on claude.ai and in Claude Code's `/usage`.
 
+<p align="center">
+  <img src="assets/Screenshot.png" alt="The panel that opens when you click the tray badge: current session 22% used, resets 19:10, 97% of the 5-hour window elapsed; weekly limit 17% used, resets Friday 15:30">
+</p>
+
 ## Build
 
 ```
