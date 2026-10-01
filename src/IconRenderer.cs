@@ -34,24 +34,35 @@ namespace ClaudeUsageTray
                     using (var brush = new SolidBrush(background))
                         g.FillPath(brush, path);
 
+                    using (var family = new FontFamily("Segoe UI"))
                     using (var fmt = new StringFormat(StringFormat.GenericTypographic))
                     {
-                        fmt.Alignment = StringAlignment.Center;
-                        fmt.LineAlignment = StringAlignment.Center;
                         fmt.FormatFlags |= StringFormatFlags.NoWrap;
 
-                        // Shrink the font until the text fits the badge.
+                        // Shrink the font until the glyphs fit the badge, then centre
+                        // them by their real ink bounds (the line box has uneven padding).
                         float em = size * 0.72f;
-                        Font font = null;
+                        GraphicsPath textPath;
+                        RectangleF b;
                         while (true)
                         {
-                            font = new Font("Segoe UI", em, FontStyle.Bold, GraphicsUnit.Pixel);
-                            if (g.MeasureString(text, font, PointF.Empty, fmt).Width <= size - 1 || em <= 6) break;
-                            font.Dispose();
+                            textPath = new GraphicsPath();
+                            textPath.AddString(text, family, (int)FontStyle.Bold, em, PointF.Empty, fmt);
+                            b = textPath.GetBounds();
+                            if (b.Width <= size - 2 || em <= 6) break;
+                            textPath.Dispose();
                             em -= 0.5f;
                         }
-                        using (font)
-                            g.DrawString(text, font, Brushes.White, new RectangleF(0, 0.5f, size, size), fmt);
+                        using (textPath)
+                        {
+                            using (var m = new Matrix())
+                            {
+                                m.Translate((size - 1) / 2f - (b.Left + b.Width / 2f),
+                                            (size - 1) / 2f - (b.Top + b.Height / 2f));
+                                textPath.Transform(m);
+                            }
+                            g.FillPath(Brushes.White, textPath);
+                        }
                     }
                 }
                 return Icon.FromHandle(bmp.GetHicon());
